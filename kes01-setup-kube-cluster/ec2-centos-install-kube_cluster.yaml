@@ -1,0 +1,102 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Mappings:
+  RegionMap:
+    us-east-1:
+      "AMALINUX1"  : "ami-0080e4c5bc078760e"
+      "AMALINUX2"  : "ami-0de53d8956e8dcf80"
+      "UBUNTU1804" : "ami-0a313d6098716f372"
+    us-west-1:
+      "AMALINUX1" : "ami-0ec6517f6edbf8044"
+      "AMALINUX2" : "ami-0a16c82eb0cc3aad8"
+    ap-south-1:
+      "AMALINUX1" : "ami-0ad42f4f66f6c1cc9"
+      "AMALINUX2" : "ami-09243352e7fc54770"
+Resources:
+  ec2KubeMaster:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", UBUNTU1804]
+      # InstanceType: t2.micro
+      InstanceType: t2.small
+      SubnetId: !ImportValue kubelab-basinfra-pubsubid
+      KeyName: !ImportValue kubelab-basinfra-keypairid
+      SecurityGroupIds:
+        - !ImportValue kubelab-basinfra-EC2SGid
+      UserData:
+        "Fn::Base64":
+          !Sub |
+            #!/bin/bash
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+            add-apt-repository \
+               "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+               $(lsb_release -cs) \
+               stable"
+            apt-get update
+            apt-get install -y docker-ce=18.06.1~ce~3-0~ubuntu
+            apt-mark hold docker-ce
+            docker version
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "AWS::StackName", "kube", "master"]]
+  ec2KubeNode1:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", UBUNTU1804]
+      # InstanceType: t2.micro
+      InstanceType: t2.small
+      SubnetId: !ImportValue kubelab-basinfra-pubsubid
+      KeyName: !ImportValue kubelab-basinfra-keypairid
+      SecurityGroupIds:
+        - !ImportValue kubelab-basinfra-EC2SGid
+      UserData:
+        "Fn::Base64":
+          !Sub |
+            #!/bin/bash
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+            add-apt-repository \
+               "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+               $(lsb_release -cs) \
+               stable"
+            apt-get update
+            apt-get install -y docker-ce=18.06.1~ce~3-0~ubuntu
+            apt-mark hold docker-ce
+            docker version
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "AWS::StackName", "kube", "node1"]]
+  ec2KubeNode2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", UBUNTU1804]
+      # InstanceType: t2.micro
+      InstanceType: t2.small
+      SubnetId: !ImportValue kubelab-basinfra-pubsubid
+      KeyName: !ImportValue kubelab-basinfra-keypairid
+      SecurityGroupIds:
+        - !ImportValue kubelab-basinfra-EC2SGid
+      UserData:
+        "Fn::Base64":
+          !Sub |
+            #!/bin/bash
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+            add-apt-repository \
+               "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+               $(lsb_release -cs) \
+               stable"
+            apt-get update
+            apt-get install -y docker-ce=18.06.1~ce~3-0~ubuntu
+            apt-mark hold docker-ce
+            docker version
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "AWS::StackName", "kube", "node2"]]
+Outputs:
+  ec2KubeMaster:
+    Description: Public IP address of EC2 instance
+    Value: !GetAtt ec2KubeMaster.PublicIp
+  ec2KubeNode1:
+    Description: Public IP address of EC2 instance
+    Value: !GetAtt ec2KubeNode1.PublicIp
+  ec2KubeNode2:
+    Description: Public IP address of EC2 instance
+    Value: !GetAtt ec2KubeNode2.PublicIp

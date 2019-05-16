@@ -1,0 +1,355 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Mappings:
+  RegionMap:
+    us-east-1:
+      "AMALINUX1" : "ami-0080e4c5bc078760e"
+      "AMALINUX2" : "ami-0de53d8956e8dcf80"
+    us-west-1:
+      "AMALINUX1" : "ami-0ec6517f6edbf8044"
+      "AMALINUX2" : "ami-0a16c82eb0cc3aad8"
+    ap-south-1:
+      "AMALINUX1" : "ami-0ad42f4f66f6c1cc9"
+      "AMALINUX2" : "ami-09243352e7fc54770"
+Resources:
+  ec2KubeMaster:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Count: "1"
+        Timeout: PT3M
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMALINUX2]
+      InstanceType: t2.micro
+      SubnetId: !ImportValue kubelab-basinfra-pubsubid
+      KeyName: !ImportValue kubelab-basinfra-keypairid
+      SecurityGroupIds:
+        - !ImportValue kubelab-basinfra-EC2SGid
+      UserData:
+        "Fn::Base64":
+          !Sub |
+            #!/bin/bash
+            yum update -y aws-cfn-bootstrap
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ec2KubeMaster --configsets setupec2 --region ${AWS::Region}
+            yum -y update
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ec2KubeMaster --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "AWS::StackName", "ec2"]]
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          setupec2:
+            - "configureCFN"
+            - "installkubernetes"
+            - "setupKubeMaster"
+        configureCFN:
+          files:
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.ec2KubeMaster.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ec2KubeMaster --configsets setupec2 --region ${AWS::Region}
+              mode: "000400"
+              owner: root
+              group: root
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                verbose=true
+                interval=5
+              mode: "000400"
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: "true"
+                ensureRunning: "true"
+                files:
+                  - "/etc/cfn/cfn-hup.conf"
+                  - "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+        installkubernetes:
+          files:
+            /etc/yum.repos.d/kubernetes.repo:
+              content: !Sub |
+                [kubernetes]
+                name=Kubernetes
+                baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+                enabled=1
+                gpgcheck=0
+                repo_gpgcheck=0
+                gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
+                https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+          commands:
+            02_disable_selinux:
+              command: !Sub |
+                setenforce 0
+                sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
+            03_enable_cluster_communication:
+              command: !Sub |
+                modprobe br_netfilter
+                echo '1' > /proc/sys/net/bridge/bridge-nf-call-iptables
+            04_disable_swap:
+              command: !Sub |
+                swapoff -a
+            05_install_docker_prerequisites:
+              command: !Sub |
+                yum install -y yum-utils device-mapper-persistent-data lvm2
+            06_add_docker_repo_install_docker:
+              command: !Sub |
+                yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+                yum install -y docker-ce
+            07_configure_docker_cgroup_driver_systemd:
+              command: !Sub |
+                sed -i '/^ExecStart/ s/$/ --exec-opt native.cgroupdriver=systemd/' /usr/lib/systemd/system/docker.service
+                systemctl daemon-reload
+                systemctl enable docker --now
+            09_install_kubernetes_repo:
+              command: !Sub |
+                yum install -y kubelet kubeadm kubectl
+            10_enable_kubernetes:
+              command: !Sub |
+                systemctl enable kubelet
+        setupKubeMaster:
+          commands:
+            11_init_cluster:
+              command: !Sub |
+                kubeadm init --pod-network-cidr=10.244.0.0/16
+            13_setup:
+              command: !Sub |
+                mkdir -p $HOME/.kube
+                sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+                sudo chown $(id -u):$(id -g) $HOME/.kube/config
+            14_deploy_flannel:
+              command: !Sub |
+                kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+            15_check_cluster_state:
+              command: !Sub |
+                kubectl get pods —all-namespaces
+  ec2KubeNode1:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Count: "1"
+        Timeout: PT3M
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMALINUX2]
+      InstanceType: t2.micro
+      SubnetId: !ImportValue kubelab-basinfra-pubsubid
+      KeyName: !ImportValue kubelab-basinfra-keypairid
+      SecurityGroupIds:
+        - !ImportValue kubelab-basinfra-EC2SGid
+      UserData:
+        "Fn::Base64":
+          !Sub |
+            #!/bin/bash
+            yum update -y aws-cfn-bootstrap
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ec2KubeNode1 --configsets setupec2 --region ${AWS::Region}
+            yum -y update
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ec2KubeNode1 --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "AWS::StackName", "ec2"]]
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          setupec2:
+            - "configureCFN"
+            - "installkubernetes"
+            - "setupKubeNode"
+        configureCFN:
+          files:
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.ec2KubeNode1.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ec2KubeNode1 --configsets setupec2 --region ${AWS::Region}
+              mode: "000400"
+              owner: root
+              group: root
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                verbose=true
+                interval=5
+              mode: "000400"
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: "true"
+                ensureRunning: "true"
+                files:
+                  - "/etc/cfn/cfn-hup.conf"
+                  - "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+        installkubernetes:
+          files:
+            /etc/yum.repos.d/kubernetes.repo:
+              content: !Sub |
+                [kubernetes]
+                name=Kubernetes
+                baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+                enabled=1
+                gpgcheck=0
+                repo_gpgcheck=0
+                gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
+                https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+          commands:
+            02_disable_selinux:
+              command: !Sub |
+                setenforce 0
+                sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
+            03_enable_cluster_communication:
+              command: !Sub |
+                modprobe br_netfilter
+                echo '1' > /proc/sys/net/bridge/bridge-nf-call-iptables
+            04_disable_swap:
+              command: !Sub |
+                swapoff -a
+            05_install_docker_prerequisites:
+              command: !Sub |
+                yum install -y yum-utils device-mapper-persistent-data lvm2
+            06_add_docker_repo_install_docker:
+              command: !Sub |
+                yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+                yum install -y docker-ce
+            07_configure_docker_cgroup_driver_systemd:
+              command: !Sub |
+                sed -i '/^ExecStart/ s/$/ --exec-opt native.cgroupdriver=systemd/' /usr/lib/systemd/system/docker.service
+                systemctl daemon-reload
+                systemctl enable docker --now
+            09_install_kubernetes_repo:
+              command: !Sub |
+                yum install -y kubelet kubeadm kubectl
+            10_enable_kubernetes:
+              command: !Sub |
+                systemctl enable kubelet
+        setupKubeNode:
+          commands:
+            16_join_cluster:
+              command: !Sub |
+                kubeadmin join
+  ec2KubeNode2:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Count: "1"
+        Timeout: PT3M
+    Properties:
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMALINUX2]
+      InstanceType: t2.micro
+      SubnetId: !ImportValue kubelab-basinfra-pubsubid
+      KeyName: !ImportValue kubelab-basinfra-keypairid
+      SecurityGroupIds:
+        - !ImportValue kubelab-basinfra-EC2SGid
+      UserData:
+        "Fn::Base64":
+          !Sub |
+            #!/bin/bash
+            yum update -y aws-cfn-bootstrap
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ec2KubeNode2 --configsets setupec2 --region ${AWS::Region}
+            yum -y update
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ec2KubeNode2 --region ${AWS::Region}
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref "AWS::StackName", "ec2"]]
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          setupec2:
+            - "configureCFN"
+            - "installkubernetes"
+            - "setupKubeNode"
+        configureCFN:
+          files:
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.ec2KubeNode2.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ec2KubeNode2 --configsets setupec2 --region ${AWS::Region}
+              mode: "000400"
+              owner: root
+              group: root
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                verbose=true
+                interval=5
+              mode: "000400"
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: "true"
+                ensureRunning: "true"
+                files:
+                  - "/etc/cfn/cfn-hup.conf"
+                  - "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+        installkubernetes:
+          files:
+            /etc/yum.repos.d/kubernetes.repo:
+              content: !Sub |
+                [kubernetes]
+                name=Kubernetes
+                baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+                enabled=1
+                gpgcheck=0
+                repo_gpgcheck=0
+                gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
+                https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+          commands:
+            02_disable_selinux:
+              command: !Sub |
+                setenforce 0
+                sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
+            03_enable_cluster_communication:
+              command: !Sub |
+                modprobe br_netfilter
+                echo '1' > /proc/sys/net/bridge/bridge-nf-call-iptables
+            04_disable_swap:
+              command: !Sub |
+                swapoff -a
+            05_install_docker_prerequisites:
+              command: !Sub |
+                yum install -y yum-utils device-mapper-persistent-data lvm2
+            06_add_docker_repo_install_docker:
+              command: !Sub |
+                yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+                yum install -y docker-ce
+            07_configure_docker_cgroup_driver_systemd:
+              command: !Sub |
+                sed -i '/^ExecStart/ s/$/ --exec-opt native.cgroupdriver=systemd/' /usr/lib/systemd/system/docker.service
+                systemctl daemon-reload
+                systemctl enable docker --now
+            09_install_kubernetes_repo:
+              command: !Sub |
+                yum install -y kubelet kubeadm kubectl
+            10_enable_kubernetes:
+              command: !Sub |
+                systemctl enable kubelet
+        setupKubeNode:
+          commands:
+            16_join_cluster:
+              command: !Sub |
+                kubeadmin join
+Outputs:
+  ec2KubeMaster:
+    Description: Public IP address of EC2 instance
+    Value: !GetAtt ec2KubeMaster.PublicIp
+  ec2KubeNode1:
+    Description: Public IP address of EC2 instance
+    Value: !GetAtt ec2KubeNode1.PublicIp
+  ec2KubeNode2:
+    Description: Public IP address of EC2 instance
+    Value: !GetAtt ec2KubeNode2.PublicIp

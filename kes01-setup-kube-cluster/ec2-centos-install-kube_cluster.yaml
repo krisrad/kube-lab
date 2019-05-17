@@ -21,7 +21,7 @@ Resources:
       SubnetId: !ImportValue kubelab-basinfra-pubsubid
       KeyName: !ImportValue kubelab-basinfra-keypairid
       SecurityGroupIds:
-        - !ImportValue kubelab-basinfra-EC2SGid
+        - !ImportValue kubelab-basinfra-secGroupBase
       UserData:
         "Fn::Base64":
           !Sub |
@@ -45,6 +45,18 @@ Resources:
             apt-get install -y kubelet=1.12.7-00 kubeadm=1.12.7-00 kubectl=1.12.7-00
             apt-mark hold kubelet kubeadm kubectl
             kubeadm version
+            # bootstrap kubernetes cluster
+            kubeadm init --pod-network-cidr=10.244.0.0/16
+            mkdir -p $HOME/.kube
+            cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+            chown $(id -u):$(id -g) $HOME/.kube/config
+            kubectl version
+            kubectl get nodes
+            # configure networking with flannel
+            echo "net.bridge.bridge-nf-call-iptables=1" | sudo tee -a /etc/sysctl.conf
+            sudo sysctl -p
+            # apply flannel config only on master
+            kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
       Tags:
         - Key: Name
           Value: !Join ["-", [!Ref "AWS::StackName", "kube", "master"]]
@@ -57,7 +69,7 @@ Resources:
       SubnetId: !ImportValue kubelab-basinfra-pubsubid
       KeyName: !ImportValue kubelab-basinfra-keypairid
       SecurityGroupIds:
-        - !ImportValue kubelab-basinfra-EC2SGid
+        - !ImportValue kubelab-basinfra-secGroupBase
       UserData:
         "Fn::Base64":
           !Sub |
@@ -81,6 +93,9 @@ Resources:
             apt-get install -y kubelet=1.12.7-00 kubeadm=1.12.7-00 kubectl=1.12.7-00
             apt-mark hold kubelet kubeadm kubectl
             kubeadm version
+            # configure networking with flannel
+            echo "net.bridge.bridge-nf-call-iptables=1" | sudo tee -a /etc/sysctl.conf
+            sudo sysctl -p
       Tags:
         - Key: Name
           Value: !Join ["-", [!Ref "AWS::StackName", "kube", "node1"]]
@@ -93,7 +108,7 @@ Resources:
       SubnetId: !ImportValue kubelab-basinfra-pubsubid
       KeyName: !ImportValue kubelab-basinfra-keypairid
       SecurityGroupIds:
-        - !ImportValue kubelab-basinfra-EC2SGid
+        - !ImportValue kubelab-basinfra-secGroupBase
       UserData:
         "Fn::Base64":
           !Sub |
@@ -117,16 +132,28 @@ Resources:
             apt-get install -y kubelet=1.12.7-00 kubeadm=1.12.7-00 kubectl=1.12.7-00
             apt-mark hold kubelet kubeadm kubectl
             kubeadm version
+            # configure networking with flannel
+            echo "net.bridge.bridge-nf-call-iptables=1" | sudo tee -a /etc/sysctl.conf
+            sudo sysctl -p
       Tags:
         - Key: Name
           Value: !Join ["-", [!Ref "AWS::StackName", "kube", "node2"]]
 Outputs:
-  ec2KubeMaster:
-    Description: Public IP address of EC2 instance
+  KubeMasterPubIp:
+    Description: Kube Master Public IP
     Value: !GetAtt ec2KubeMaster.PublicIp
-  ec2KubeNode1:
-    Description: Public IP address of EC2 instance
+  KubeMasterPvtIp:
+    Description: Kube Master Private IP
+    Value: !GetAtt ec2KubeMaster.PrivateIp
+  KubeNode1PubIp:
+    Description: Kube Node1 Public IP
     Value: !GetAtt ec2KubeNode1.PublicIp
-  ec2KubeNode2:
-    Description: Public IP address of EC2 instance
+  KubeNode1PvtIp:
+    Description: Kube Node1 Private IP
+    Value: !GetAtt ec2KubeNode1.PrivateIp
+  KubeNode2PubIp:
+    Description: Kube Node2 Public IP
     Value: !GetAtt ec2KubeNode2.PublicIp
+  KubeNode2PvtIp:
+    Description: Kube Node2 Private IP
+    Value: !GetAtt ec2KubeNode2.PrivateIp

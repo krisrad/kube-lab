@@ -100,7 +100,7 @@ Resources:
     Properties:
       RouteTableId: !Ref pubsubrt
       SubnetId: !Ref pubsub
-  EC2SG:
+  secGroupBase:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow SSH access
@@ -118,7 +118,16 @@ Resources:
           Description: Allow HTTP access from work computer
       Tags:
         - Key: Name
-          Value: !Join ["-", [!Ref "AWS::StackName", "ec2", "sec", "grp"]]
+          Value: !Join ["-", [!Ref "AWS::StackName", "sec", "grp", "kube", "master"]]
+  secGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt secGroupBase.GroupId
+      IpProtocol: -1
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !GetAtt secGroupBase.GroupId
+      Description: Allow all access from other hosts within this security group
 Outputs:
   pubsubid:
     Description: public Subnet id
@@ -130,8 +139,8 @@ Outputs:
     Value: !Ref keypair
     Export:
       Name: kubelab-basinfra-keypairid
-  EC2SGid:
+  secGroupBase:
     Description: Security group id
-    Value: !Ref EC2SG
+    Value: !Ref secGroupBase
     Export:
-      Name: kubelab-basinfra-EC2SGid
+      Name: kubelab-basinfra-secGroupBase

@@ -26,6 +26,7 @@ Resources:
         "Fn::Base64":
           !Sub |
             #!/bin/bash
+            # install docker
             curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
             add-apt-repository \
                "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
@@ -35,6 +36,15 @@ Resources:
             apt-get install -y docker-ce=18.06.1~ce~3-0~ubuntu
             apt-mark hold docker-ce
             docker version
+            # install kubelet, kubeadm, kubectl
+            curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+            cat << EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
+            deb https://apt.kubernetes.io/ kubernetes-xenial main
+            EOF
+            apt-get update
+            apt-get install -y kubelet=1.12.7-00 kubeadm=1.12.7-00 kubectl=1.12.7-00
+            apt-mark hold kubelet kubeadm kubectl
+            kubeadm version
       Tags:
         - Key: Name
           Value: !Join ["-", [!Ref "AWS::StackName", "kube", "master"]]
@@ -52,6 +62,7 @@ Resources:
         "Fn::Base64":
           !Sub |
             #!/bin/bash
+            # install docker
             curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
             add-apt-repository \
                "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
@@ -61,6 +72,15 @@ Resources:
             apt-get install -y docker-ce=18.06.1~ce~3-0~ubuntu
             apt-mark hold docker-ce
             docker version
+            # install kubelet, kubeadm, kubectl
+            curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+            cat << EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
+            deb https://apt.kubernetes.io/ kubernetes-xenial main
+            EOF
+            apt-get update
+            apt-get install -y kubelet=1.12.7-00 kubeadm=1.12.7-00 kubectl=1.12.7-00
+            apt-mark hold kubelet kubeadm kubectl
+            kubeadm version
       Tags:
         - Key: Name
           Value: !Join ["-", [!Ref "AWS::StackName", "kube", "node1"]]
@@ -78,6 +98,7 @@ Resources:
         "Fn::Base64":
           !Sub |
             #!/bin/bash
+            # install docker
             curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
             add-apt-repository \
                "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
@@ -87,6 +108,15 @@ Resources:
             apt-get install -y docker-ce=18.06.1~ce~3-0~ubuntu
             apt-mark hold docker-ce
             docker version
+            # install kubelet, kubeadm, kubectl
+            curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+            cat << EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
+            deb https://apt.kubernetes.io/ kubernetes-xenial main
+            EOF
+            apt-get update
+            apt-get install -y kubelet=1.12.7-00 kubeadm=1.12.7-00 kubectl=1.12.7-00
+            apt-mark hold kubelet kubeadm kubectl
+            kubeadm version
       Tags:
         - Key: Name
           Value: !Join ["-", [!Ref "AWS::StackName", "kube", "node2"]]

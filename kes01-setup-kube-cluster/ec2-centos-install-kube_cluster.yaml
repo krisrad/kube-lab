@@ -57,6 +57,7 @@ Resources:
             sudo sysctl -p
             # apply flannel config only on master
             kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
+            kubectl get pods -n kube-system
       Tags:
         - Key: Name
           Value: !Join ["-", [!Ref "AWS::StackName", "kube", "master"]]
